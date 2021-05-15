@@ -129,17 +129,13 @@ function LeadAllocationHome() {
     return (
         <div className="App">
             <header className="App-header">
-                <p>
-                    CA File
-                </p>
+                <h3>CA File</h3>
                 <LocalFileReader
                 // CA Data
                     onFileLoad={(e) => handleCaDataLoad(e)}
                     onFileRemove={() => handleFileRemove()}
                 />
-                <p>
-                    Lead File
-                </p>
+                <h3>Lead File</h3>
                 <LocalFileReader
                 // Lead Data
                     onFileLoad={(e) => handleLeadDataLoad(e)}

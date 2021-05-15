@@ -63,7 +63,9 @@ function ResultsPanel(props) {
 
     return (
         <div>
+            <h3>Aggregated Results</h3>
             <Table columns={OVERALL_RESULTS_TABLE_COLUMNS} data={props.aggregatedResults ? [props.aggregatedResults] : []}/>
+            <h3>Individual CA Results</h3>
             <Table columns={CA_RESULTS_TABLE_COLUMNS} data={props.courseAdvisors ? props.courseAdvisors : []}/>
         </div>
     );
