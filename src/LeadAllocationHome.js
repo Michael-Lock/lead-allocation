@@ -1,52 +1,31 @@
 import LocalFileReader from './LocalFileReader';
 import ConfigPanel from './ConfigPanel';
 import React, {useState} from 'react';
+import moment from 'moment';
 
 import {ALLOCATION_MODES} from './AllocationUtils';
-import { Table } from './Table';
+import ResultsPanel from './ResultsPanel';
 
 function LeadAllocationHome() {
     const [leadData, setLeadData] = useState();
     const [courseAdvisors, setCourseAdvisors] = useState();
     const [selectedMode, setSelectedMode] = useState();
+    const [aggregatedResults, setAggregatedResults] = useState();
 
-    const resultsTableColumns = React.useMemo(
-        () => [
-            {
-                Header: 'CA',
-                accessor: 'caName',
-            },
-            {
-                Header: 'Allotment',
-                accessor: 'currentAllotment',
-            },
-            {
-                Header: 'Average Propensity',
-                accessor: (row) => row ? row.averagePropensity.toFixed(2) : 0,
-            },
-            {
-                Header: 'Variance to Inherent',
-                accessor: (row) => row ? row.varianceToInherent.toFixed(2) : 0,
-            },
-            {
-                Header: 'Predicted Conversions',
-                accessor: (row) => row ? row.predictedConversions.toFixed(2) : 0,
-            },
-        ],
-        []
-    )
+
 
     const NON_CA_FIELDS = ["leadId", "created", "inherent", "portfolio"];
-    let handleDataLoad = (e) => {
+    let handleLeadDataLoad = (e) => {
         let leads = [];
         for (let rowNum = 0; rowNum < e.length; rowNum++) {
             let row = e[rowNum].data;
             let newLead = {
                 leadId: row.leadId,
-                created: row.created,
+                created: moment(row.created, "DD/MM/YYYY hh:mm"),
                 inherent: row.inherent,
                 portfolio: row.portfolio,
             };
+
             newLead.courseAdvisors = [];
             let caNum = 0;
             for (let fieldNum = 0; fieldNum < e[rowNum].meta.fields.length; fieldNum++) {
@@ -63,29 +42,35 @@ function LeadAllocationHome() {
             leads[rowNum] = newLead;
         }
         setLeadData(leads);
-
-        let newCourseAdvisors = [];
-        if (leads.length > 0) {
-            let leadCourseAdvisors = leads[0].courseAdvisors;
-            for (let i = 0; i < leadCourseAdvisors.length; i++) {
-                newCourseAdvisors[i] = {
-                    id: i,
-                    caName: leadCourseAdvisors[i].caName,
-                    currentAllotment: 0,
-                    cumulativePropensity: 0,
-                    cumulativeInherent: 0,
-                    averagePropensity: 0,
-                    varianceToInherent: 0,
-                    predictedConversions: 0,
-                }
-            }
-        }
-        setCourseAdvisors(newCourseAdvisors);
     }
 
+    let handleCaDataLoad = (e) => {
+        let newCourseAdvisors = [];
+
+        for (let rowNum = 0; rowNum < e.length; rowNum++) {
+            let row = e[rowNum].data;
+            let newCa = {
+                id: row.id,
+                caName: row.name,
+                portfolio: row.portfolio,
+                location: row.location,
+                currentAllotment: 0,
+                cumulativePropensity: 0,
+                cumulativeInherent: 0,
+                averagePropensity: 0,
+                varianceToInherent: 0,
+                predictedConversions: 0,
+            }
+            newCourseAdvisors[rowNum] = newCa;
+        }
+
+        setCourseAdvisors(newCourseAdvisors);
+    }    
+
     let handleFileRemove = () => {
-        setLeadData(null);
-        setCourseAdvisors(null);
+        setLeadData();
+        setCourseAdvisors();
+        setAggregatedResults();
     }
 
     let handleModeChange = (selectedMode) => {
@@ -102,15 +87,32 @@ function LeadAllocationHome() {
             allocatedCa.cumulativeInherent = allocatedCa.cumulativeInherent + lead.inherent;
         }
 
+        let aggregatedResults = {
+            totalLeads: 0,
+            cumulativePropensity: 0,
+            cumulativeInherent: 0,
+            averagePropensity: 0,
+            averageVarianceToInherent: 0,
+            predictedConversions: 0,
+        }
         for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
             let advisor = updatedCourseAdvisors[caNum];
-            advisor.averagePropensity = advisor.cumulativePropensity / advisor.currentAllotment;
+            advisor.averagePropensity = advisor.currentAllotment ? advisor.cumulativePropensity / advisor.currentAllotment : 0;
             advisor.varianceToInherent = advisor.cumulativePropensity - advisor.cumulativeInherent;
             advisor.predictedConversions = advisor.currentAllotment * advisor.averagePropensity;
+
+            aggregatedResults.totalLeads += advisor.currentAllotment;
+            aggregatedResults.cumulativePropensity += advisor.cumulativePropensity;
+            aggregatedResults.cumulativeInherent += advisor.cumulativeInherent;
+            aggregatedResults.predictedConversions += advisor.predictedConversions;
         }
+        aggregatedResults.averagePropensity = aggregatedResults.cumulativePropensity / aggregatedResults.totalLeads;
+        aggregatedResults.averageVarianceToInherent = (aggregatedResults.cumulativePropensity - aggregatedResults.cumulativeInherent) / updatedCourseAdvisors.length;
 
         let updatedResult = {...result};
         updatedResult.courseAdvisors = updatedCourseAdvisors;
+        updatedResult.aggregatedResults = aggregatedResults;
+
         return updatedResult;
     }
 
@@ -119,17 +121,30 @@ function LeadAllocationHome() {
 
         setLeadData(result.leads);
         setCourseAdvisors(result.courseAdvisors);
+        setAggregatedResults(result.aggregatedResults);
     }
+
+
 
     return (
         <div className="App">
             <header className="App-header">
                 <p>
-                    Lead Allocation Simulator
+                    CA File
                 </p>
                 <LocalFileReader
-                    onFileLoad={(e) => handleDataLoad(e)}
+                // CA Data
+                    onFileLoad={(e) => handleCaDataLoad(e)}
                     onFileRemove={() => handleFileRemove()}
+                />
+                <p>
+                    Lead File
+                </p>
+                <LocalFileReader
+                // Lead Data
+                    onFileLoad={(e) => handleLeadDataLoad(e)}
+                    onFileRemove={() => handleFileRemove()}
+                    disabled={!(courseAdvisors && courseAdvisors.length > 0)}
                 />
                 <ConfigPanel
                     selectedMode={selectedMode}
@@ -141,8 +156,10 @@ function LeadAllocationHome() {
                 >
                     Run Simulation
                 </button>
-            <Table columns={resultsTableColumns} data={courseAdvisors ? courseAdvisors : []}/>
-
+                <ResultsPanel
+                    courseAdvisors={courseAdvisors}
+                    aggregatedResults={aggregatedResults}
+                />
             </header>
         </div>
     );
