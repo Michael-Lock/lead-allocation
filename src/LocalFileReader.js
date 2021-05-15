@@ -2,13 +2,21 @@ import React, { Component } from 'react'
 
 import { CSVReader } from 'react-papaparse'
 
-const buttonRef = React.createRef()
+
 
 export default class LocalFileReader extends Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            buttonRef: React.createRef()
+        }
+    }    
+    
   handleOpenDialog = (e) => {
     // Note that the ref is set async, so it might be null at some point
-    if (buttonRef.current) {
-      buttonRef.current.open(e)
+    if (this.state.buttonRef.current) {
+      this.state.buttonRef.current.open(e)
     }
   }
 
@@ -21,20 +29,20 @@ export default class LocalFileReader extends Component {
   }
 
   handleOnRemoveFile = (data) => {
-    return this.props.OnFileRemove();
+    return this.props.onFileRemove();
   }
 
   handleRemoveFile = (e) => {
     // Note that the ref is set async, so it might be null at some point
-    if (buttonRef.current) {
-      buttonRef.current.removeFile(e)
+    if (this.state.buttonRef.current) {
+        this.state.buttonRef.current.removeFile(e)
     }
   }
 
   render() {
     return (
       <CSVReader
-        ref={buttonRef}
+        ref={this.state.buttonRef ? this.state.buttonRef : null}
         onFileLoad={this.handleOnFileLoad}
         onError={this.handleOnError}
         noClick
@@ -59,6 +67,7 @@ export default class LocalFileReader extends Component {
             <button
               type='button'
               onClick={this.handleOpenDialog}
+              disabled={this.props.disabled}
               style={{
                 borderRadius: 0,
                 marginLeft: 0,
