@@ -1,4 +1,31 @@
 
+export const ALLOCATION_MODES = {
+    RoundRobin: {
+        id: 0,
+        name: "Round Robin",
+        description: "Allocates leads one by one to each available CA",
+        allocationFunction: allocateRoundRobin,
+    },
+    MostSuitableAggressive: {
+        id: 1,
+        name: "Most Suitable (Aggressive)",
+        description: "Allocates leads always to the CA with the highest likelihood of conversion. Uses lowest current allotment as a tiebreaker",
+        allocationFunction: allocateMostSuitableAggressive,
+    },
+    MostSuitableHardAllotmentTolerance: {
+        id: 2,
+        name: "Most Suitable (Hard allotment tolerance)",
+        description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a given number of leads more than any other CA currently available",
+        parameters: {
+            allotmentTolerance: {
+                order: 0,
+                label: "Allotment Tolerance",
+            },
+        },
+        allocationFunction: allocateMostSuitableHardAllotmentLimit,
+    }
+}
+
 const PORTFOLIOS = {
     Domestic: "Domestic",
     Canada: "Canada",
@@ -16,7 +43,7 @@ const TIMEZONES = {
 }
 
 
-let allocateRoundRobin = (leads, courseAdvisors) => {
+function allocateRoundRobin(leads, courseAdvisors) {
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.map((advisor) => {
         let newAdvisor = {...advisor};
@@ -57,38 +84,41 @@ let allocateRoundRobin = (leads, courseAdvisors) => {
 }
 
 
-let allocateMostSuitableAggressive = (leads, courseAdvisors) => {
+function allocateMostSuitableAggressive(leads, courseAdvisors) {
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.slice();
 
     for (let i = 0; i < leads.length; i++) {
-        let lead = updatedLeads[i];
-        let highestPropensity = -1;
-        let mostSuitableCa;
-        let isAllocatedInWorkingHours = false;
-        for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-            let advisor = updatedCourseAdvisors[caNum];
-            let advisorPropensity = lead.courseAdvisors[caNum].propensity;
-            //Hard pass if the portfolio doesn't match
-            if (!isMatchingPortfolio(advisor, lead)) {
-                continue;
-            }
-            let advisorIsInWorkingHours = isInWorkingHours(lead.created, advisor.location);
-            let useNewAdvisor = !mostSuitableCa || (advisorIsInWorkingHours && !isAllocatedInWorkingHours); //always assign if there's no current allocation or the allocated CA is not available
-            if (!useNewAdvisor && !(isAllocatedInWorkingHours && !advisorIsInWorkingHours)) { //ignore the CA if they're not in the right timezone and the existing selection is
-                //use the new CA if they're more suitable
-                useNewAdvisor = advisorPropensity > highestPropensity || (advisorPropensity === highestPropensity && mostSuitableCa.currentAllotment > advisor.currentAllotment);
-            }
+        let lead = updatedLeads[i];        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
 
-            if (useNewAdvisor) {
-                mostSuitableCa = advisor;
-                isAllocatedInWorkingHours = advisorIsInWorkingHours;
-                highestPropensity = advisorPropensity;
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            validAdvisors[caNum] = {
+                ...advisor, 
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+                isInWorkingHours: caIsInWorkingHours,
             }
         }
-        if (!mostSuitableCa) {
-            console.log("No allocation?");
-        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+            //otherwise pick the most suitable CA based on propensity
+            if (b.propensity !== a.propensity) {
+                return b.propensity - a.propensity;
+            }
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
         updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
     }
@@ -101,20 +131,66 @@ let allocateMostSuitableAggressive = (leads, courseAdvisors) => {
 }
 
 
-export const ALLOCATION_MODES = [
-    {
-        id: 0,
-        name: "Round Robin",
-        description: "Allocates leads one by one to each available CA",
-        allocationFunction: allocateRoundRobin,
-    },
-    {
-        id: 1,
-        name: "Most Suitable (Aggressive)",
-        description: "Allocates leads always to the CA with the highest likelihood of conversion. Lowest current allotment is used only as a tiebreaker",
-        allocationFunction: allocateMostSuitableAggressive,
+function allocateMostSuitableHardAllotmentLimit(leads, courseAdvisors, parameters) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+    const TOLERANCE = parameters["allotmentTolerance"];
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];
+        let lowestAllotment = Number.MAX_SAFE_INTEGER;
+        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            lowestAllotment = advisor.currentAllotment < lowestAllotment ? advisor.currentAllotment : lowestAllotment;
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            validAdvisors[caNum] = {
+                ...advisor, 
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+                isInWorkingHours: caIsInWorkingHours,
+            }
+        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+            //then firm prededence to those within the tolerance range for allotment
+            if (b.currentAllotment - lowestAllotment < TOLERANCE && a.currentAllotment - lowestAllotment >= TOLERANCE) {
+                return 1;
+            }
+            if (a.currentAllotment - lowestAllotment < TOLERANCE && b.currentAllotment - lowestAllotment >= TOLERANCE) {
+                return -1;
+            }
+            //picking the person least outside tolerance if both are
+            if (a.currentAllotment - lowestAllotment >= TOLERANCE && b.currentAllotment - lowestAllotment >= TOLERANCE && b.currentAllotment !== a.currentAllotment) {
+                return a.currentAllotment - b.currentAllotment;
+            }
+            //otherwise picking the most suitable CA based on propensity
+            if (b.propensity !== a.propensity) {
+                return b.propensity - a.propensity;
+            }
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let mostSuitableCa = validAdvisors[0];
+        lead.allocatedCa = mostSuitableCa.id;
+        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
     }
-]
+    
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
 
 
 function isMatchingPortfolio(advisor, lead) {
