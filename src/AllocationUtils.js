@@ -1,4 +1,5 @@
 
+
 export const ALLOCATION_MODES = {
     RoundRobin: {
         id: 0,
@@ -15,7 +16,9 @@ export const ALLOCATION_MODES = {
     MostSuitableHardAllotmentTolerance: {
         id: 2,
         name: "Most Suitable (Hard allotment tolerance)",
-        description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a given number of leads more than any other CA currently available",
+        description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
+            "given number of leads more than any other CA currently available. If all available CAs are outside of this tolerance, " +
+            "picks the one with the fewest leads currently allotted",
         parameters: {
             allotmentTolerance: {
                 order: 0,
