@@ -11,6 +11,7 @@ function LeadAllocationHome() {
     const [courseAdvisors, setCourseAdvisors] = useState();
     const [selectedMode, setSelectedMode] = useState();
     const [aggregatedResults, setAggregatedResults] = useState();
+    const [inputParameters, setInputParameters] = useState();
 
 
 
@@ -71,10 +72,32 @@ function LeadAllocationHome() {
         setLeadData();
         setCourseAdvisors();
         setAggregatedResults();
+        setInputParameters();
     }
 
     let handleModeChange = (selectedMode) => {
+        setInputParameters();
         setSelectedMode(ALLOCATION_MODES[selectedMode]);
+    }
+
+    let handleParameterChange = (e) => {
+        let updatedInputParameters = inputParameters ? inputParameters.slice() : [];
+        if (e.target.value) {
+            updatedInputParameters[e.target.name] = e.target.value;
+        } 
+        else {
+            updatedInputParameters.splice(e.target.name);
+        }
+
+        setInputParameters(updatedInputParameters);
+    }
+
+    let runSimulation = () => {
+        const result = generateResults(selectedMode.allocationFunction(leadData, courseAdvisors, inputParameters));
+
+        setLeadData(result.leads);
+        setCourseAdvisors(result.courseAdvisors);
+        setAggregatedResults(result.aggregatedResults);
     }
 
     let generateResults = (result) =>  {
@@ -116,14 +139,6 @@ function LeadAllocationHome() {
         return updatedResult;
     }
 
-    let runSimulation = () => {
-        const result = generateResults(selectedMode.allocationFunction(leadData, courseAdvisors));
-
-        setLeadData(result.leads);
-        setCourseAdvisors(result.courseAdvisors);
-        setAggregatedResults(result.aggregatedResults);
-    }
-
 
 
     return (
@@ -145,10 +160,12 @@ function LeadAllocationHome() {
                 <ConfigPanel
                     selectedMode={selectedMode}
                     onModeChange={(e) => handleModeChange(e)}
+                    onParameterChange={(e, parameter) => handleParameterChange(e, parameter)}
                 />
                 <button
                     onClick={() => runSimulation()}
-                    disabled={!leadData || !selectedMode}
+                    disabled={!leadData || !selectedMode || 
+                        (selectedMode.parameters && (!inputParameters || Object.keys(inputParameters).length < Object.keys(selectedMode.parameters).length))}
                 >
                     Run Simulation
                 </button>
@@ -176,21 +193,5 @@ Auto-allocate
 Summaries: overall result score (raw conversions, variance to inherent)
 
 Individual leads (allocated CA [freeze], inherent, per CA propensity)
-
-*/
-
-
-
-/*
-
-[
-    {
-        leadID: 1,
-        createTime: 2021-1-1 11:03,
-        inherent: 0.18
-    }
-
-]
-
 
 */
