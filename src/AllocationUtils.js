@@ -38,10 +38,12 @@ const TIMEZONES = {
     Adelaide: {
         startHour: 9,
         endHour: 17,
+        timezoneOffsetFromAdelaide: 0,
     },
     Canada: {
         startHour: 22.5,
         endHour: 6.5,
+        timezoneOffsetFromAdelaide: 13.5,
     }
 }
 
@@ -203,6 +205,12 @@ function isMatchingPortfolio(advisor, lead) {
 function isInWorkingHours(datetime, location) {
     let timezone = TIMEZONES[location];
     let hourOfDay = datetime.hour() + datetime.minute() / 60;
+
+    //Return false for anything falling on a Saturday or Sunday
+    let dayOfWeek = datetime.clone().subtract(timezone.timezoneOffsetFromAdelaide, 'hours').day();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+        return false;
+    }
     
     let effectiveEndHour = timezone.endHour;
     let effectiveHourOfDay = hourOfDay;
