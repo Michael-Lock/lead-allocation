@@ -80,13 +80,13 @@ function LeadAllocationHome() {
         setSelectedMode(ALLOCATION_MODES[selectedMode]);
     }
 
-    let handleParameterChange = (e) => {
+    let handleParameterChange = (e, parameterOrder) => {
         let updatedInputParameters = inputParameters ? inputParameters.slice() : [];
         if (e.target.value) {
-            updatedInputParameters[e.target.name] = e.target.value;
+            updatedInputParameters[parameterOrder] = e.target.value;
         } 
         else {
-            updatedInputParameters.splice(e.target.name);
+            updatedInputParameters.splice(parameterOrder);
         }
 
         setInputParameters(updatedInputParameters);
@@ -165,7 +165,7 @@ function LeadAllocationHome() {
                 <button
                     onClick={() => runSimulation()}
                     disabled={!leadData || !selectedMode || 
-                        (selectedMode.parameters && (!inputParameters || Object.keys(inputParameters).length < Object.keys(selectedMode.parameters).length))}
+                        (selectedMode.parameters && (!inputParameters || inputParameters.length < Object.keys(selectedMode.parameters).length))}
                 >
                     Run Simulation
                 </button>

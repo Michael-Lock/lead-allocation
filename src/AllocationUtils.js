@@ -24,6 +24,10 @@ export const ALLOCATION_MODES = {
                 order: 0,
                 label: "Allotment Tolerance",
             },
+            decayPerDay: {
+                order: 1,
+                label: "Lead decay per day",
+            },
         },
         allocationFunction: allocateMostSuitableHardAllotmentLimit,
     }
@@ -139,21 +143,28 @@ function allocateMostSuitableAggressive(leads, courseAdvisors) {
 function allocateMostSuitableHardAllotmentLimit(leads, courseAdvisors, parameters) {
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.slice();
-    const TOLERANCE = parameters["allotmentTolerance"];
+
+    const tolerance = parameters[ALLOCATION_MODES.MostSuitableHardAllotmentTolerance.parameters.allotmentTolerance.order];
+    const decayPerDay = parameters[ALLOCATION_MODES.MostSuitableHardAllotmentTolerance.parameters.decayPerDay.order]
+    const simulationStartDate = leads[0].created.startOf('date');
 
     for (let i = 0; i < leads.length; i++) {
         let lead = updatedLeads[i];
         let lowestAllotment = Number.MAX_SAFE_INTEGER;
+        let daysFromStart = leads[i].created.startOf('date').diff(simulationStartDate, 'days');
         
         let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
 
         for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
             let advisor = validAdvisors[caNum];
-            lowestAllotment = advisor.currentAllotment < lowestAllotment ? advisor.currentAllotment : lowestAllotment;
+            let advisorDecayedAllotment = Math.max(advisor.currentAllotment - daysFromStart * decayPerDay, 0);
+
+            lowestAllotment = advisorDecayedAllotment < lowestAllotment ? advisorDecayedAllotment : lowestAllotment;
             let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
             validAdvisors[caNum] = {
                 ...advisor, 
                 propensity: lead.courseAdvisors[advisor.id].propensity,
+                decayedAllotment: advisorDecayedAllotment,
                 isInWorkingHours: caIsInWorkingHours,
             }
         }
@@ -167,22 +178,22 @@ function allocateMostSuitableHardAllotmentLimit(leads, courseAdvisors, parameter
                 return -1;
             }
             //then firm prededence to those within the tolerance range for allotment
-            if (b.currentAllotment - lowestAllotment < TOLERANCE && a.currentAllotment - lowestAllotment >= TOLERANCE) {
+            if (b.decayedAllotment - lowestAllotment < tolerance && a.decayedAllotment - lowestAllotment >= tolerance) {
                 return 1;
             }
-            if (a.currentAllotment - lowestAllotment < TOLERANCE && b.currentAllotment - lowestAllotment >= TOLERANCE) {
+            if (a.decayedAllotment - lowestAllotment < tolerance && b.decayedAllotment - lowestAllotment >= tolerance) {
                 return -1;
             }
             //picking the person least outside tolerance if both are
-            if (a.currentAllotment - lowestAllotment >= TOLERANCE && b.currentAllotment - lowestAllotment >= TOLERANCE && b.currentAllotment !== a.currentAllotment) {
-                return a.currentAllotment - b.currentAllotment;
+            if (a.decayedAllotment - lowestAllotment >= tolerance && b.decayedAllotment - lowestAllotment >= tolerance && b.decayedAllotment !== a.decayedAllotment) {
+                return a.decayedAllotment - b.decayedAllotment;
             }
             //otherwise picking the most suitable CA based on propensity
             if (b.propensity !== a.propensity) {
                 return b.propensity - a.propensity;
             }
             //use allotment numbers as a tiebreaker
-            return a.currentAllotment - b.currentAllotment;
+            return a.decayedAllotment - b.decayedAllotment;
         });
 
         let mostSuitableCa = validAdvisors[0];
