@@ -22,7 +22,8 @@ function LeadAllocationHome() {
             let row = e[rowNum].data;
             let newLead = {
                 leadId: row.leadId,
-                created: moment(row.created, "DD/MM/YYYY hh:mm"),
+                // created: moment(row.created, "DD/MM/YYYY hh:mm"),
+                created: moment(row.created, "YYYY-MM-DDTHH:MMZ"),
                 inherent: row.inherent,
                 portfolio: row.portfolio,
             };
