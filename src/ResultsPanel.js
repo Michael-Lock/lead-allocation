@@ -19,7 +19,11 @@ function ResultsPanel(props) {
                 accessor: 'location'
             },
             {
-                Header: 'Allotment',
+                Header: 'Total Allotment',
+                accessor: 'totalAllotment',
+            },
+            {
+                Header: 'Final Allotment',
                 accessor: 'currentAllotment',
             },
             {

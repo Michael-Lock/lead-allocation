@@ -28,6 +28,14 @@ export const ALLOCATION_MODES = {
                 order: 1,
                 label: "Lead decay per day",
             },
+            cycleDecayDurationDays: {
+                order: 2,
+                label: "Days per sales cycle",
+            },
+            decayPerCycle: {
+                order: 3,
+                label: "Lead decay per sales cycle (%)",
+            },
         },
         allocationFunction: allocateMostSuitableFixedAllotmentLimit,
     },
@@ -45,6 +53,14 @@ export const ALLOCATION_MODES = {
             decayPerDay: {
                 order: 1,
                 label: "Lead decay per day",
+            },
+            cycleDecayDurationDays: {
+                order: 2,
+                label: "Days per sales cycle",
+            },
+            decayPerCycle: {
+                order: 3,
+                label: "Lead decay per sales cycle (%)",
             },
         },
         allocationFunction: allocateMostSuitableProportionalAllotmentLimit,
@@ -100,7 +116,7 @@ function allocateRoundRobin(leads, courseAdvisors) {
 
         selectedAdvisor.lastAllocatedId = lead.leadId;
         lead.allocatedCa = selectedAdvisor.id;
-        updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
+        updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
     }
 
     const returnObj = {
@@ -142,12 +158,12 @@ function allocateMostSuitableAggressive(leads, courseAdvisors) {
                 return b.propensity - a.propensity;
             }
             //use allotment numbers as a tiebreaker
-            return a.currentAllotment - b.currentAllotment;
+            return a.totalAllotment - b.totalAllotment;
         });
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
     }
     
     const returnObj = {
@@ -176,26 +192,52 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
     if (isPercentage) {
         tolerance = tolerance / 100;
     }
-    const decayPerDay = parameters[ALLOCATION_MODES.MostSuitableFixedAllotmentTolerance.parameters.decayPerDay.order]
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.MostSuitableFixedAllotmentTolerance.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.MostSuitableFixedAllotmentTolerance.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.MostSuitableFixedAllotmentTolerance.parameters.decayPerCycle.order]) / 100;
     const simulationStartDate = leads[0].created.clone().startOf('date');
+
+    let lastDailyDecayDate = simulationStartDate.clone();
+    let lastCycleDecayDate = simulationStartDate.clone();
 
     for (let i = 0; i < leads.length; i++) {
         let lead = updatedLeads[i];
         let lowestAllotment = Number.MAX_SAFE_INTEGER;
-        let daysFromStart = leads[i].created.clone().startOf('date').diff(simulationStartDate, 'days');
+        let currentDate = leads[i].created.clone().startOf('date');
+
+        //Per cycle delay, ignore if the cycle is set to zero
+        let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
+        if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
+            let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
+            let totalDecayPercentage = decayPerCycle ^ decayCyclesPassed;
+            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+                let advisor = updatedCourseAdvisors[caNum];
+                advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
+            }
+            lastCycleDecayDate.add(cycleDecayDurationDays, 'days');
+        }
+
+        //Per day delay
+        let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
+        if (dailyDecayDays > 0) {
+            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+                let advisor = updatedCourseAdvisors[caNum];
+                let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
+                advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0)
+            }
+            lastDailyDecayDate = currentDate.clone();
+        }
         
         let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
 
         for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
             let advisor = validAdvisors[caNum];
-            let advisorDecayedAllotment = Math.max(advisor.currentAllotment - daysFromStart * decayPerDay * advisor.decayModifier, 0);
-
-            lowestAllotment = advisorDecayedAllotment < lowestAllotment ? advisorDecayedAllotment : lowestAllotment;
+            lowestAllotment = Math.min(advisor.currentAllotment, lowestAllotment);
+            
             let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
             validAdvisors[caNum] = {
                 ...advisor, 
                 propensity: lead.courseAdvisors[advisor.id].propensity,
-                decayedAllotment: advisorDecayedAllotment,
                 isInWorkingHours: caIsInWorkingHours,
             }
         }
@@ -217,27 +259,28 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
                 return -1;
             }
             //then firm prededence to those within the tolerance range for allotment
-            if (b.decayedAllotment < allotmentCap && a.decayedAllotment >= allotmentCap) {
+            if (b.currentAllotment < allotmentCap && a.currentAllotment >= allotmentCap) {
                 return 1;
             }
-            if (a.decayedAllotment < allotmentCap && b.decayedAllotment >= allotmentCap) {
+            if (a.currentAllotment < allotmentCap && b.currentAllotment >= allotmentCap) {
                 return -1;
             }
             //picking the person least outside tolerance if both are
-            if (a.decayedAllotment >= allotmentCap && b.decayedAllotment >= allotmentCap && b.decayedAllotment !== a.decayedAllotment) {
-                return a.decayedAllotment - b.decayedAllotment;
+            if (a.currentAllotment >= allotmentCap && b.currentAllotment >= allotmentCap && b.currentAllotment !== a.currentAllotment) {
+                return a.currentAllotment - b.currentAllotment;
             }
             //otherwise picking the most suitable CA based on propensity
             if (b.propensity !== a.propensity) {
                 return b.propensity - a.propensity;
             }
             //use allotment numbers as a tiebreaker
-            return a.decayedAllotment - b.decayedAllotment;
+            return a.currentAllotment - b.currentAllotment;
         });
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
     }
 
     const returnObj = {

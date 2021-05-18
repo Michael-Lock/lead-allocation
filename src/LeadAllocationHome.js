@@ -57,6 +57,7 @@ function LeadAllocationHome() {
                 portfolio: row.portfolio,
                 location: row.location,
                 decayModifier: row.decayModifier,
+                totalAllotment: 0,
                 currentAllotment: 0,
                 cumulativePropensity: 0,
                 cumulativeInherent: 0,
@@ -122,11 +123,11 @@ function LeadAllocationHome() {
         }
         for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
             let advisor = updatedCourseAdvisors[caNum];
-            advisor.averagePropensity = advisor.currentAllotment ? advisor.cumulativePropensity / advisor.currentAllotment : 0;
+            advisor.averagePropensity = advisor.totalAllotment ? advisor.cumulativePropensity / advisor.totalAllotment : 0;
             advisor.varianceToInherent = advisor.cumulativePropensity - advisor.cumulativeInherent;
-            advisor.predictedConversions = advisor.currentAllotment * advisor.averagePropensity;
+            advisor.predictedConversions = advisor.totalAllotment * advisor.averagePropensity;
 
-            aggregatedResults.totalLeads += advisor.currentAllotment;
+            aggregatedResults.totalLeads += advisor.totalAllotment;
             aggregatedResults.cumulativePropensity += advisor.cumulativePropensity;
             aggregatedResults.cumulativeInherent += advisor.cumulativeInherent;
             aggregatedResults.predictedConversions += advisor.predictedConversions;
