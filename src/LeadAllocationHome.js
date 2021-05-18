@@ -56,6 +56,7 @@ function LeadAllocationHome() {
                 caName: row.name,
                 portfolio: row.portfolio,
                 location: row.location,
+                decayModifier: row.decayModifier,
                 currentAllotment: 0,
                 cumulativePropensity: 0,
                 cumulativeInherent: 0,
