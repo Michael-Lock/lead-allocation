@@ -24,11 +24,11 @@ function ResultsPanel(props) {
             },
             {
                 Header: 'Average Propensity',
-                accessor: (row) => row ? row.averagePropensity.toFixed(2) : 0,
+                accessor: (row) => row ? row.averagePropensity.toFixed(3) : 0,
             },
             {
                 Header: 'Variance to Inherent',
-                accessor: (row) => row ? row.varianceToInherent.toFixed(2) : 0,
+                accessor: (row) => row ? row.varianceToInherent.toFixed(3) : 0,
             },
             {
                 Header: 'Predicted Conversions',
@@ -46,11 +46,11 @@ function ResultsPanel(props) {
             },
             {
                 Header: 'Average Propensity',
-                accessor: (row) => row ? row.averagePropensity.toFixed(2) : 0,
+                accessor: (row) => row ? row.averagePropensity.toFixed(3) : 0,
             },
             {
                 Header: 'Average Variance to Inherent',
-                accessor: (row) => row ? row.averageVarianceToInherent.toFixed(2) : 0,
+                accessor: (row) => row ? row.averageVarianceToInherent.toFixed(3) : 0,
             },
             {
                 Header: 'Predicted Conversions',
