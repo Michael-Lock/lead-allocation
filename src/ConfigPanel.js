@@ -19,7 +19,7 @@ function ConfigPanel(props) {
                     name={parameters[i]}
                     type="number"
                     step="any"
-                    onChange={props.onParameterChange}
+                    onChange={(e) => props.onParameterChange(e, currentParameter.order)}
                 />
             </div>
         }

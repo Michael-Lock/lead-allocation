@@ -22,7 +22,8 @@ function LeadAllocationHome() {
             let row = e[rowNum].data;
             let newLead = {
                 leadId: row.leadId,
-                created: moment(row.created, "DD/MM/YYYY hh:mm"),
+                // created: moment(row.created, "DD/MM/YYYY hh:mm"),
+                created: moment(row.created, "YYYY-MM-DDTHH:MMZ"),
                 inherent: row.inherent,
                 portfolio: row.portfolio,
             };
@@ -55,6 +56,8 @@ function LeadAllocationHome() {
                 caName: row.name,
                 portfolio: row.portfolio,
                 location: row.location,
+                decayModifier: row.decayModifier,
+                totalAllotment: 0,
                 currentAllotment: 0,
                 cumulativePropensity: 0,
                 cumulativeInherent: 0,
@@ -80,13 +83,13 @@ function LeadAllocationHome() {
         setSelectedMode(ALLOCATION_MODES[selectedMode]);
     }
 
-    let handleParameterChange = (e) => {
+    let handleParameterChange = (e, parameterOrder) => {
         let updatedInputParameters = inputParameters ? inputParameters.slice() : [];
         if (e.target.value) {
-            updatedInputParameters[e.target.name] = e.target.value;
+            updatedInputParameters[parameterOrder] = e.target.value;
         } 
         else {
-            updatedInputParameters.splice(e.target.name);
+            updatedInputParameters.splice(parameterOrder);
         }
 
         setInputParameters(updatedInputParameters);
@@ -120,11 +123,11 @@ function LeadAllocationHome() {
         }
         for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
             let advisor = updatedCourseAdvisors[caNum];
-            advisor.averagePropensity = advisor.currentAllotment ? advisor.cumulativePropensity / advisor.currentAllotment : 0;
+            advisor.averagePropensity = advisor.totalAllotment ? advisor.cumulativePropensity / advisor.totalAllotment : 0;
             advisor.varianceToInherent = advisor.cumulativePropensity - advisor.cumulativeInherent;
-            advisor.predictedConversions = advisor.currentAllotment * advisor.averagePropensity;
+            advisor.predictedConversions = advisor.totalAllotment * advisor.averagePropensity;
 
-            aggregatedResults.totalLeads += advisor.currentAllotment;
+            aggregatedResults.totalLeads += advisor.totalAllotment;
             aggregatedResults.cumulativePropensity += advisor.cumulativePropensity;
             aggregatedResults.cumulativeInherent += advisor.cumulativeInherent;
             aggregatedResults.predictedConversions += advisor.predictedConversions;
@@ -165,7 +168,7 @@ function LeadAllocationHome() {
                 <button
                     onClick={() => runSimulation()}
                     disabled={!leadData || !selectedMode || 
-                        (selectedMode.parameters && (!inputParameters || Object.keys(inputParameters).length < Object.keys(selectedMode.parameters).length))}
+                        (selectedMode.parameters && (!inputParameters || inputParameters.length < Object.keys(selectedMode.parameters).length))}
                 >
                     Run Simulation
                 </button>
