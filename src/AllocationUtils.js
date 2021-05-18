@@ -7,14 +7,20 @@ export const ALLOCATION_MODES = {
         description: "Allocates leads one by one to each available CA",
         allocationFunction: allocateRoundRobin,
     },
-    MostSuitableAggressive: {
+    Unconstrained: {
         id: 1,
+        name: "Unconstrained",
+        description: "Allocates leads always to the CA with the highest likelihood of conversion. Ignores portfolio and working hours constraints",
+        allocationFunction: allocateUnconstrained,
+    },
+    MostSuitableAggressive: {
+        id: 2,
         name: "Most Suitable (Aggressive)",
         description: "Allocates leads always to the CA with the highest likelihood of conversion. Uses lowest current allotment as a tiebreaker",
         allocationFunction: allocateMostSuitableAggressive,
     },
     MostSuitableFixedAllotmentTolerance: {
-        id: 2,
+        id: 3,
         name: "Most Suitable (Fixed allotment tolerance)",
         description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
             "given number of leads more than any other CA currently available. If all available CAs are outside of this tolerance, " +
@@ -40,7 +46,7 @@ export const ALLOCATION_MODES = {
         allocationFunction: allocateMostSuitableFixedAllotmentLimit,
     },
     MostSuitableProportionalAllotmentTolerance: {
-        id: 3,
+        id: 4,
         name: "Most Suitable (Proportional allotment tolerance)",
         description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
             "number of leads more than any other CA currently available by a given percentage. If all available CAs are outside of this tolerance, " +
@@ -117,8 +123,44 @@ function allocateRoundRobin(leads, courseAdvisors) {
         selectedAdvisor.lastAllocatedId = lead.leadId;
         lead.allocatedCa = selectedAdvisor.id;
         updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
+        updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
     }
 
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
+function allocateUnconstrained(leads, courseAdvisors) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];        
+        let validAdvisors = updatedCourseAdvisors.slice();
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            validAdvisors[caNum] = {
+                ...advisor, 
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+            }
+        }
+
+        validAdvisors.sort((a,b) => {
+            //only care about propensity. As this is an unrealistic simulation, tiebreakers are pointless
+            return b.propensity - a.propensity;
+        });
+
+        let mostSuitableCa = validAdvisors[0];
+        lead.allocatedCa = mostSuitableCa.id;
+        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
+    }
+    
     const returnObj = {
         leads: updatedLeads,
         courseAdvisors: updatedCourseAdvisors,
@@ -164,6 +206,7 @@ function allocateMostSuitableAggressive(leads, courseAdvisors) {
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
         updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
     }
     
     const returnObj = {
