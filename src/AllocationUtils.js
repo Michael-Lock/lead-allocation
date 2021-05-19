@@ -7,20 +7,26 @@ export const ALLOCATION_MODES = {
         description: "Allocates leads one by one to each available CA",
         allocationFunction: allocateRoundRobin,
     },
-    Unconstrained: {
+    RoundRobinUnconstrained: {
         id: 1,
-        name: "Unconstrained",
+        name: "Round Robin (Unconstrained)",
+        description: "Allocates leads one by one to each CA, irrespective of portfolio or working hours",
+        allocationFunction: allocateRoundRobinUnconstrained,
+    },
+    MostSuitableUnconstrained: {
+        id: 2,
+        name: "Most Suitable (Unconstrained)",
         description: "Allocates leads always to the CA with the highest likelihood of conversion. Ignores portfolio and working hours constraints",
-        allocationFunction: allocateUnconstrained,
+        allocationFunction: allocateMostSuitableUnconstrained,
     },
     MostSuitableAggressive: {
-        id: 2,
+        id: 3,
         name: "Most Suitable (Aggressive)",
         description: "Allocates leads always to the CA with the highest likelihood of conversion. Uses lowest current allotment as a tiebreaker",
         allocationFunction: allocateMostSuitableAggressive,
     },
     MostSuitableFixedAllotmentTolerance: {
-        id: 3,
+        id: 4,
         name: "Most Suitable (Fixed allotment tolerance)",
         description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
             "given number of leads more than any other CA currently available. If all available CAs are outside of this tolerance, " +
@@ -46,7 +52,7 @@ export const ALLOCATION_MODES = {
         allocationFunction: allocateMostSuitableFixedAllotmentLimit,
     },
     MostSuitableProportionalAllotmentTolerance: {
-        id: 4,
+        id: 5,
         name: "Most Suitable (Proportional allotment tolerance)",
         description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
             "number of leads more than any other CA currently available by a given percentage. If all available CAs are outside of this tolerance, " +
@@ -134,7 +140,35 @@ function allocateRoundRobin(leads, courseAdvisors) {
 }
 
 
-function allocateUnconstrained(leads, courseAdvisors) {
+function allocateRoundRobinUnconstrained(leads, courseAdvisors) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.map((advisor) => {
+        let newAdvisor = {...advisor};
+        newAdvisor.lastAllocatedId = -1;
+        return newAdvisor;
+    });
+
+    for (let leadIndex = 0; leadIndex < leads.length; leadIndex++) {
+        let lead = updatedLeads[leadIndex];
+        let sortedAdvisors = updatedCourseAdvisors.sort((a,b) => a.lastAllocatedId - b.lastAllocatedId);;
+
+        let selectedAdvisor = sortedAdvisors[0];
+
+        selectedAdvisor.lastAllocatedId = lead.leadId;
+        lead.allocatedCa = selectedAdvisor.id;
+        updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
+        updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
+    }
+
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
+function allocateMostSuitableUnconstrained(leads, courseAdvisors) {
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.slice();
 
