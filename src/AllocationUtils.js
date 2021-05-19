@@ -77,6 +77,66 @@ export const ALLOCATION_MODES = {
         },
         allocationFunction: allocateMostSuitableProportionalAllotmentLimit,
     },
+    SuitabilityAllotmentBalancedLinear: {
+        id: 6,
+        name: "Suitability vs. Allotment Balance (Linear)",
+        description: "Allocates leads to the CA based on both their suitability and their current allotment. " +
+        "Higher suitability will increase the preference given to the CA but a higher allotment will decrease it. " + 
+        "Weightings are used to control the relative importance of choosing most suitable vs. balancing allotment",
+        parameters: {
+            suitabilityWeighting: {
+                order: 0,
+                label: "Suitability weighting",
+            },
+            allotmentWeighting: {
+                order: 1,
+                label: "Allotment weighting",
+            },
+            decayPerDay: {
+                order: 2,
+                label: "Lead decay per day",
+            },
+            cycleDecayDurationDays: {
+                order: 3,
+                label: "Days per sales cycle",
+            },
+            decayPerCycle: {
+                order: 4,
+                label: "Lead decay per sales cycle (%)",
+            },
+        },
+        allocationFunction: allocateSuitabilityAllotmentBalancedLinear,
+    },
+    SuitabilityAllotmentBalancedProportional: {
+        id: 6,
+        name: "Suitability vs. Allotment Balance (Proportional)",
+        description: "Allocates leads to the CA based on both their suitability and their current allotment. " +
+        "Higher suitability proportionally relative to the average will increase the preference given to the CA but a higher allotment will decrease it. " + 
+        "Weightings are used to control the relative importance of choosing most suitable vs. balancing allotment",
+        parameters: {
+            suitabilityWeighting: {
+                order: 0,
+                label: "Suitability weighting",
+            },
+            allotmentWeighting: {
+                order: 1,
+                label: "Allotment weighting",
+            },
+            decayPerDay: {
+                order: 2,
+                label: "Lead decay per day",
+            },
+            cycleDecayDurationDays: {
+                order: 3,
+                label: "Days per sales cycle",
+            },
+            decayPerCycle: {
+                order: 4,
+                label: "Lead decay per sales cycle (%)",
+            },
+        },
+        allocationFunction: allocateSuitabilityAllotmentBalancedProportional,
+    },
 }
 
 const PORTFOLIOS = {
@@ -150,7 +210,7 @@ function allocateRoundRobinUnconstrained(leads, courseAdvisors) {
 
     for (let leadIndex = 0; leadIndex < leads.length; leadIndex++) {
         let lead = updatedLeads[leadIndex];
-        let sortedAdvisors = updatedCourseAdvisors.sort((a,b) => a.lastAllocatedId - b.lastAllocatedId);;
+        let sortedAdvisors = updatedCourseAdvisors.slice().sort((a,b) => a.lastAllocatedId - b.lastAllocatedId);;
 
         let selectedAdvisor = sortedAdvisors[0];
 
@@ -265,6 +325,7 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.slice();
 
+    //HACK: possibly not safe as this assumes that the parameters for both methods are in the same order
     let tolerance = Number(parameters[ALLOCATION_MODES.MostSuitableFixedAllotmentTolerance.parameters.allotmentTolerance.order]);
     if (isPercentage) {
         tolerance = tolerance / 100;
@@ -367,6 +428,222 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
     return returnObj;
 }
 
+
+function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, parameters) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+
+    const suitabilityWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.suitabilityWeighting.order]);
+    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.allotmentWeighting.order]);
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.decayPerCycle.order]) / 100;
+    const simulationStartDate = leads[0].created.clone().startOf('date');
+
+    let lastDailyDecayDate = simulationStartDate.clone();
+    let lastCycleDecayDate = simulationStartDate.clone();
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];
+        let totalAllotment = 0;
+        let availableAdvisors = 0;
+        let currentDate = leads[i].created.clone().startOf('date');
+
+        //Per cycle delay, ignore if the cycle is set to zero
+        let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
+        if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
+            let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
+            let totalDecayPercentage = decayPerCycle ^ decayCyclesPassed;
+            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+                let advisor = updatedCourseAdvisors[caNum];
+                advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
+            }
+            lastCycleDecayDate.add(cycleDecayDurationDays, 'days');
+        }
+
+        //Per day delay
+        let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
+        if (dailyDecayDays > 0) {
+            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+                let advisor = updatedCourseAdvisors[caNum];
+                let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
+                advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0)
+            }
+            lastDailyDecayDate = currentDate.clone();
+        }
+        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            totalAllotment = totalAllotment + advisor.currentAllotment;
+            availableAdvisors++;
+            
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            let suitabilityScore = lead.courseAdvisors[advisor.id].propensity * suitabilityWeighting;
+
+            validAdvisors[caNum] = {
+                ...advisor, 
+                suitabilityScore: suitabilityScore,
+                isInWorkingHours: caIsInWorkingHours,
+            }
+        }
+        
+        let averageAllotment;
+        if (availableAdvisors > 0) {
+            averageAllotment = totalAllotment / availableAdvisors;
+        }
+        else {
+            averageAllotment = totalAllotment / validAdvisors.length;
+        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+
+            //Otherwise choosing the CA with the best overall score
+            let overallScoreA = a.suitabilityScore + (averageAllotment - a.currentAllotment) * allotmentWeighting;
+            let overallScoreB = b.suitabilityScore + (averageAllotment - b.currentAllotment) * allotmentWeighting;
+            if (overallScoreB !== overallScoreA) {
+                return overallScoreB - overallScoreA;
+            }
+
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let mostSuitableCa = validAdvisors[0];
+        lead.allocatedCa = mostSuitableCa.id;
+        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
+    }
+
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
+function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors, parameters) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+
+    const suitabilityWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.suitabilityWeighting.order]);
+    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.allotmentWeighting.order]);
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.decayPerCycle.order]) / 100;
+    const simulationStartDate = leads[0].created.clone().startOf('date');
+
+    let lastDailyDecayDate = simulationStartDate.clone();
+    let lastCycleDecayDate = simulationStartDate.clone();
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];
+        let totalAllotment = 0;
+        let cumulativePropensity = 0;
+        let availableAdvisors = 0;
+        let currentDate = leads[i].created.clone().startOf('date');
+
+        //Per cycle delay, ignore if the cycle is set to zero
+        let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
+        if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
+            let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
+            let totalDecayPercentage = decayPerCycle ^ decayCyclesPassed;
+            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+                let advisor = updatedCourseAdvisors[caNum];
+                advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
+            }
+            lastCycleDecayDate.add(cycleDecayDurationDays, 'days');
+        }
+
+        //Per day delay
+        let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
+        if (dailyDecayDays > 0) {
+            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+                let advisor = updatedCourseAdvisors[caNum];
+                let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
+                advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0)
+            }
+            lastDailyDecayDate = currentDate.clone();
+        }
+        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            totalAllotment = totalAllotment + advisor.currentAllotment;
+            cumulativePropensity = cumulativePropensity + lead.courseAdvisors[advisor.id].propensity;
+            availableAdvisors++;
+            
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            // let suitabilityScore = lead.courseAdvisors[advisor.id].propensity * suitabilityWeighting;
+
+            validAdvisors[caNum] = {
+                ...advisor, 
+                // suitabilityScore: suitabilityScore,
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+                isInWorkingHours: caIsInWorkingHours,
+            }
+        }
+        
+        let averageAllotment;
+        let averagePropensity;
+        if (availableAdvisors > 0) {
+            averageAllotment = totalAllotment / availableAdvisors;
+            averagePropensity = cumulativePropensity / availableAdvisors;
+        }
+        else {
+            averageAllotment = totalAllotment / validAdvisors.length;
+            averagePropensity = cumulativePropensity / validAdvisors.length;
+        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+
+            //Otherwise choosing the CA with the best overall score
+            let overallScoreA = calculateOverallScore(a, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting);
+            let overallScoreB = calculateOverallScore(b, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting);
+            if (overallScoreB !== overallScoreA) {
+                return overallScoreB - overallScoreA;
+            }
+
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let mostSuitableCa = validAdvisors[0];
+        lead.allocatedCa = mostSuitableCa.id;
+        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
+        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
+    }
+
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
+function calculateOverallScore(advisor, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting) {
+    let suitabilityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * suitabilityWeighting : 0;
+    let allotmentScore = (averageAllotment - advisor.currentAllotment) * allotmentWeighting
+    return suitabilityScore + allotmentScore;
+}
 
 function isMatchingPortfolio(advisor, lead) {
     return advisor.portfolio === lead.portfolio;
