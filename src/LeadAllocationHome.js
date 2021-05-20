@@ -49,7 +49,9 @@ function LeadAllocationHome() {
             let row = e[rowNum].data;
             let newLead = {
                 leadId: row.leadId,
+                salesforceId: row.Id,
                 created: moment(row.created, DATE_FORMAT),
+                cluster: row.cluster,
                 inherent: row.inherent,
                 portfolio: row.portfolio,
             };
