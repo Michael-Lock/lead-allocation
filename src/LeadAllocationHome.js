@@ -1,4 +1,5 @@
 import LocalFileReader from './LocalFileReader';
+import { CSVDownloader } from 'react-papaparse'
 import ConfigPanel from './ConfigPanel';
 import React, {useState} from 'react';
 import moment from 'moment';
@@ -12,39 +13,10 @@ function LeadAllocationHome() {
     const [selectedMode, setSelectedMode] = useState();
     const [aggregatedResults, setAggregatedResults] = useState();
     const [inputParameters, setInputParameters] = useState();
+    const [exportData, setExportData] = useState();
 
+    const DATE_FORMAT = "YYYY-MM-DDTHH:MMZ";
 
-
-    const NON_CA_FIELDS = ["leadId", "created", "inherent", "portfolio"];
-    let handleLeadDataLoad = (e) => {
-        let leads = [];
-        for (let rowNum = 0; rowNum < e.length; rowNum++) {
-            let row = e[rowNum].data;
-            let newLead = {
-                leadId: row.leadId,
-                // created: moment(row.created, "DD/MM/YYYY hh:mm"),
-                created: moment(row.created, "YYYY-MM-DDTHH:MMZ"),
-                inherent: row.inherent,
-                portfolio: row.portfolio,
-            };
-
-            newLead.courseAdvisors = [];
-            let caNum = 0;
-            for (let fieldNum = 0; fieldNum < e[rowNum].meta.fields.length; fieldNum++) {
-                if (NON_CA_FIELDS.some(v => v === e[rowNum].meta.fields[fieldNum])) {
-                    continue;
-                }
-                let newCa = {
-                    id: caNum++,
-                    caName: e[rowNum].meta.fields[fieldNum],
-                    propensity: row[e[rowNum].meta.fields[fieldNum]],
-                }
-                newLead.courseAdvisors.push(newCa);
-            }
-            leads[rowNum] = newLead;
-        }
-        setLeadData(leads);
-    }
 
     let handleCaDataLoad = (e) => {
         let newCourseAdvisors = [];
@@ -69,13 +41,46 @@ function LeadAllocationHome() {
         }
 
         setCourseAdvisors(newCourseAdvisors);
-    }    
+    }   
+
+    let handleLeadDataLoad = (e) => {
+        let leads = [];
+        for (let rowNum = 0; rowNum < e.length; rowNum++) {
+            let row = e[rowNum].data;
+            let newLead = {
+                leadId: row.leadId,
+                created: moment(row.created, DATE_FORMAT),
+                inherent: row.inherent,
+                portfolio: row.portfolio,
+            };
+
+            newLead.courseAdvisors = [];
+            let caNames = [];
+            for (let caNum = 0; caNum < courseAdvisors.length; caNum++) {
+                caNames[caNum] = courseAdvisors[caNum].caName;
+            }
+            let caNum = 0;
+            for (let fieldNum = 0; fieldNum < e[rowNum].meta.fields.length; fieldNum++) {
+                if (caNames.some(v => v === e[rowNum].meta.fields[fieldNum])) {
+                    let newCa = {
+                        id: caNum++,
+                        caName: e[rowNum].meta.fields[fieldNum],
+                        propensity: row[e[rowNum].meta.fields[fieldNum]],
+                    }
+                    newLead.courseAdvisors.push(newCa);                    
+                }
+            }
+            leads[rowNum] = newLead;
+        }
+        setLeadData(leads);
+    } 
 
     let handleFileRemove = () => {
         setLeadData();
         setCourseAdvisors();
         setAggregatedResults();
         setInputParameters();
+        setExportData();
     }
 
     let handleModeChange = (selectedMode) => {
@@ -101,6 +106,7 @@ function LeadAllocationHome() {
         setLeadData(result.leads);
         setCourseAdvisors(result.courseAdvisors);
         setAggregatedResults(result.aggregatedResults);
+        setExportData(result.exportData);
     }
 
     let generateResults = (result) =>  {
@@ -139,7 +145,35 @@ function LeadAllocationHome() {
         updatedResult.courseAdvisors = updatedCourseAdvisors;
         updatedResult.aggregatedResults = aggregatedResults;
 
+        updatedResult = generateExportData(updatedResult);
+
         return updatedResult;
+    }
+
+
+    let generateExportData = (result) => {
+        let adjustedLeads = leadData.slice().map((lead) => {
+            let newLead = {...lead};
+            newLead.created = newLead.created.format(DATE_FORMAT);
+            newLead.allocatedCa = courseAdvisors[newLead.allocatedCa].caName;
+            delete newLead.courseAdvisors;
+
+            return newLead;
+        });
+
+        let updatedResult = {...result};
+        updatedResult.exportData = adjustedLeads;
+
+        return updatedResult;
+    }
+
+
+    let getExportFilename = () => {
+        let filename = "invalid-nodata"
+        if (aggregatedResults && selectedMode) {
+            filename = Object.keys(ALLOCATION_MODES)[selectedMode.id] + "-" + moment().format("YYYYMMDD-HHMM-ss")
+        }
+        return filename;
     }
 
 
@@ -172,6 +206,14 @@ function LeadAllocationHome() {
                 >
                     Run Simulation
                 </button>
+                <CSVDownloader
+                    data={exportData}
+                    type={"button"}
+                    filename={getExportFilename()}
+                    bom={false}
+                >
+                    Export Results
+                </CSVDownloader>
                 <ResultsPanel
                     courseAdvisors={courseAdvisors}
                     aggregatedResults={aggregatedResults}

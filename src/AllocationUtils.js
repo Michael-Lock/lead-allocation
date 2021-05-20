@@ -188,6 +188,7 @@ function allocateRoundRobin(leads, courseAdvisors) {
 
         selectedAdvisor.lastAllocatedId = lead.leadId;
         lead.allocatedCa = selectedAdvisor.id;
+        lead.allotmentAtAllocation = selectedAdvisor.currentAllotment + 1;
         updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
         updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
     }
@@ -216,6 +217,7 @@ function allocateRoundRobinUnconstrained(leads, courseAdvisors) {
 
         selectedAdvisor.lastAllocatedId = lead.leadId;
         lead.allocatedCa = selectedAdvisor.id;
+        lead.allotmentAtAllocation = selectedAdvisor.currentAllotment + 1;
         updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
         updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
     }
@@ -251,6 +253,7 @@ function allocateMostSuitableUnconstrained(leads, courseAdvisors) {
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
+        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
         updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
         updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
     }
@@ -299,6 +302,7 @@ function allocateMostSuitableAggressive(leads, courseAdvisors) {
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
+        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
         updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
         updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
     }
@@ -417,6 +421,7 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
+        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
         updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
         updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
     }
@@ -519,6 +524,7 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
+        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
         updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
         updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
     }
@@ -627,6 +633,7 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
 
         let mostSuitableCa = validAdvisors[0];
         lead.allocatedCa = mostSuitableCa.id;
+        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
         updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
         updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
     }
