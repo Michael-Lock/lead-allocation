@@ -347,28 +347,7 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
         let lowestAllotment = Number.MAX_SAFE_INTEGER;
         let currentDate = leads[i].created.clone().startOf('date');
 
-        //Per cycle delay, ignore if the cycle is set to zero
-        let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
-        if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
-            let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
-            let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
-            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-                let advisor = updatedCourseAdvisors[caNum];
-                advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
-            }
-            lastCycleDecayDate.add(cycleDecayDurationDays * decayCyclesPassed, 'days');
-        }
-
-        //Per day delay
-        let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
-        if (dailyDecayDays > 0) {
-            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-                let advisor = updatedCourseAdvisors[caNum];
-                let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
-                advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0)
-            }
-            lastDailyDecayDate = currentDate.clone();
-        }
+        lastDailyDecayDate = applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay);
         
         let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
 
@@ -454,28 +433,7 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
         let availableAdvisors = 0;
         let currentDate = leads[i].created.clone().startOf('date');
 
-        //Per cycle delay, ignore if the cycle is set to zero
-        let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
-        if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
-            let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
-            let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
-            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-                let advisor = updatedCourseAdvisors[caNum];
-                advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
-            }
-            lastCycleDecayDate.add(cycleDecayDurationDays * cycleDelayDays, 'days');
-        }
-
-        //Per day delay
-        let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
-        if (dailyDecayDays > 0) {
-            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-                let advisor = updatedCourseAdvisors[caNum];
-                let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
-                advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0)
-            }
-            lastDailyDecayDate = currentDate.clone();
-        }
+        lastDailyDecayDate = applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay);
         
         let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
 
@@ -558,28 +516,7 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
         let availableAdvisors = 0;
         let currentDate = leads[i].created.clone().startOf('date');
 
-        //Per cycle delay, ignore if the cycle is set to zero
-        let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
-        if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
-            let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
-            let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
-            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-                let advisor = updatedCourseAdvisors[caNum];
-                advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
-            }
-            lastCycleDecayDate.add(cycleDecayDurationDays * cycleDelayDays, 'days');
-        }
-
-        //Per day delay
-        let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
-        if (dailyDecayDays > 0) {
-            for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
-                let advisor = updatedCourseAdvisors[caNum];
-                let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
-                advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0)
-            }
-            lastDailyDecayDate = currentDate.clone();
-        }
+        lastDailyDecayDate = applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay);
         
         let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
 
@@ -645,6 +582,32 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
     return returnObj;
 }
 
+
+function applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay) {
+    //Per cycle delay, ignore if the cycle is set to zero
+    let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days');
+    if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
+        let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
+        let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
+        for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+            let advisor = updatedCourseAdvisors[caNum];
+            advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
+        }
+        lastCycleDecayDate.add(cycleDecayDurationDays * cycleDelayDays, 'days');
+    }
+
+    //Per day delay
+    let dailyDecayDays = currentDate.diff(lastDailyDecayDate, 'days');
+    if (dailyDecayDays > 0) {
+        for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
+            let advisor = updatedCourseAdvisors[caNum];
+            let decayAmount = dailyDecayDays * decayPerDay * advisor.decayModifier;
+            advisor.currentAllotment = Math.max(advisor.currentAllotment - decayAmount, 0);
+        }
+        lastDailyDecayDate = currentDate.clone();
+    }
+    return lastDailyDecayDate;
+}
 
 function calculateOverallScore(advisor, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting) {
     let suitabilityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * suitabilityWeighting : 0;
