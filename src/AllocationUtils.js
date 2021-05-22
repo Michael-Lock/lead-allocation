@@ -351,12 +351,12 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
         let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
         if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
             let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
-            let totalDecayPercentage = decayPerCycle ^ decayCyclesPassed;
+            let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
             for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
                 let advisor = updatedCourseAdvisors[caNum];
                 advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
             }
-            lastCycleDecayDate.add(cycleDecayDurationDays, 'days');
+            lastCycleDecayDate.add(cycleDecayDurationDays * decayCyclesPassed, 'days');
         }
 
         //Per day delay
@@ -458,12 +458,12 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
         let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
         if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
             let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
-            let totalDecayPercentage = decayPerCycle ^ decayCyclesPassed;
+            let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
             for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
                 let advisor = updatedCourseAdvisors[caNum];
                 advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
             }
-            lastCycleDecayDate.add(cycleDecayDurationDays, 'days');
+            lastCycleDecayDate.add(cycleDecayDurationDays * cycleDelayDays, 'days');
         }
 
         //Per day delay
@@ -562,12 +562,12 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
         let cycleDelayDays = currentDate.diff(lastCycleDecayDate, 'days'); 
         if (cycleDecayDurationDays > 0 && cycleDelayDays >= cycleDecayDurationDays) {
             let decayCyclesPassed = Math.floor(cycleDelayDays / cycleDecayDurationDays);
-            let totalDecayPercentage = decayPerCycle ^ decayCyclesPassed;
+            let totalDecayPercentage = decayPerCycle ** decayCyclesPassed;
             for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
                 let advisor = updatedCourseAdvisors[caNum];
                 advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
             }
-            lastCycleDecayDate.add(cycleDecayDurationDays, 'days');
+            lastCycleDecayDate.add(cycleDecayDurationDays * cycleDelayDays, 'days');
         }
 
         //Per day delay
