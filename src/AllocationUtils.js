@@ -51,8 +51,30 @@ export const ALLOCATION_MODES = {
         },
         allocationFunction: allocateMostSuitableFixedAllotmentLimit,
     },
-    MostSuitableProportionalAllotmentTolerance: {
+    MostSuitableAdvisorAllotmentTolerance: {
         id: 5,
+        name: "Most Suitable (Per-CA allotment tolerance)",
+        description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
+            "given number of leads more than any other CA currently available. If all available CAs are outside of this tolerance, " +
+            "picks the one with the fewest leads currently allotted",
+        parameters: {
+            decayPerDay: {
+                order: 0,
+                label: "Lead decay per day",
+            },
+            cycleDecayDurationDays: {
+                order: 1,
+                label: "Days per sales cycle",
+            },
+            decayPerCycle: {
+                order: 2,
+                label: "Lead decay per sales cycle (%)",
+            },
+        },
+        allocationFunction: allocateMostSuitableAdvisorAllotmentLimit,
+    },
+    MostSuitableProportionalAllotmentTolerance: {
+        id: 6,
         name: "Most Suitable (Proportional allotment tolerance)",
         description: "Allocates leads to the CA with the highest likelihood of conversion, so long as their allotment is not a " + 
             "number of leads more than any other CA currently available by a given percentage. If all available CAs are outside of this tolerance, " +
@@ -78,7 +100,7 @@ export const ALLOCATION_MODES = {
         allocationFunction: allocateMostSuitableProportionalAllotmentLimit,
     },
     SuitabilityAllotmentBalancedLinear: {
-        id: 6,
+        id: 7,
         name: "Suitability vs. Allotment Balance (Linear)",
         description: "Allocates leads to the CA based on both their suitability and their current allotment. " +
         "Higher suitability will increase the preference given to the CA but a higher allotment will decrease it. " + 
@@ -108,7 +130,7 @@ export const ALLOCATION_MODES = {
         allocationFunction: allocateSuitabilityAllotmentBalancedLinear,
     },
     SuitabilityAllotmentBalancedProportional: {
-        id: 6,
+        id: 8,
         name: "Suitability vs. Allotment Balance (Proportional)",
         description: "Allocates leads to the CA based on both their suitability and their current allotment. " +
         "Higher suitability proportionally relative to the average will increase the preference given to the CA but a higher allotment will decrease it. " + 
@@ -187,10 +209,7 @@ function allocateRoundRobin(leads, courseAdvisors) {
         let selectedAdvisor = filteredAdvisors.length > 0 ? filteredAdvisors[0] : sortedAdvisors[0];
 
         selectedAdvisor.lastAllocatedId = lead.leadId;
-        lead.allocatedCa = selectedAdvisor.id;
-        lead.allotmentAtAllocation = selectedAdvisor.currentAllotment + 1;
-        updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
-        updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
 
     const returnObj = {
@@ -216,10 +235,7 @@ function allocateRoundRobinUnconstrained(leads, courseAdvisors) {
         let selectedAdvisor = sortedAdvisors[0];
 
         selectedAdvisor.lastAllocatedId = lead.leadId;
-        lead.allocatedCa = selectedAdvisor.id;
-        lead.allotmentAtAllocation = selectedAdvisor.currentAllotment + 1;
-        updatedCourseAdvisors[selectedAdvisor.id].totalAllotment++;
-        updatedCourseAdvisors[selectedAdvisor.id].currentAllotment++;
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
 
     const returnObj = {
@@ -251,11 +267,8 @@ function allocateMostSuitableUnconstrained(leads, courseAdvisors) {
             return b.propensity - a.propensity;
         });
 
-        let mostSuitableCa = validAdvisors[0];
-        lead.allocatedCa = mostSuitableCa.id;
-        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
-        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
     
     const returnObj = {
@@ -300,11 +313,8 @@ function allocateMostSuitableAggressive(leads, courseAdvisors) {
             return a.totalAllotment - b.totalAllotment;
         });
 
-        let mostSuitableCa = validAdvisors[0];
-        lead.allocatedCa = mostSuitableCa.id;
-        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
-        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment++;
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
     
     const returnObj = {
@@ -398,11 +408,84 @@ function allocateMostSuitableWithAllotmentLimit(leads, courseAdvisors, parameter
             return a.currentAllotment - b.currentAllotment;
         });
 
-        let mostSuitableCa = validAdvisors[0];
-        lead.allocatedCa = mostSuitableCa.id;
-        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
-        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
+    }
+
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
+function allocateMostSuitableAdvisorAllotmentLimit(leads, courseAdvisors, parameters, isPercentage) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.MostSuitableAdvisorAllotmentTolerance.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.MostSuitableAdvisorAllotmentTolerance.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.MostSuitableAdvisorAllotmentTolerance.parameters.decayPerCycle.order]) / 100;
+    const simulationStartDate = leads[0].created.clone().startOf('date');
+
+    let lastDailyDecayDate = simulationStartDate.clone();
+    let lastCycleDecayDate = simulationStartDate.clone();
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];
+        let lowestAllotment = Number.MAX_SAFE_INTEGER;
+        let currentDate = leads[i].created.clone().startOf('date');
+
+        lastDailyDecayDate = applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay);
+        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            lowestAllotment = Math.min(advisor.currentAllotment, lowestAllotment);
+            
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            validAdvisors[caNum] = {
+                ...advisor, 
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+                isInWorkingHours: caIsInWorkingHours,
+            }
+        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+            let allotmentCapA = lowestAllotment + a.allotmentLimit;
+            let allotmentCapB = lowestAllotment + b.allotmentLimit;
+            let remainingAllotmentA = allotmentCapA - a.currentAllotment;
+            let remainingAllotmentB = allotmentCapB - b.currentAllotment;
+            //then firm prededence to those within the tolerance range for allotment
+            if (b.currentAllotment < allotmentCapB && a.currentAllotment >= allotmentCapA) {
+                return 1;
+            }
+            if (a.currentAllotment < allotmentCapA && b.currentAllotment >= allotmentCapB) {
+                return -1;
+            }
+            //picking the person least outside tolerance if both are
+            if (a.currentAllotment >= allotmentCapA && b.currentAllotment >= allotmentCapB && remainingAllotmentB !== remainingAllotmentA) {
+                return remainingAllotmentB - remainingAllotmentA;
+            }
+            //otherwise picking the most suitable CA based on propensity
+            if (b.propensity !== a.propensity) {
+                return b.propensity - a.propensity;
+            }
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
 
     const returnObj = {
@@ -480,11 +563,8 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
             return a.currentAllotment - b.currentAllotment;
         });
 
-        let mostSuitableCa = validAdvisors[0];
-        lead.allocatedCa = mostSuitableCa.id;
-        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
-        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
 
     const returnObj = {
@@ -568,11 +648,8 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
             return a.currentAllotment - b.currentAllotment;
         });
 
-        let mostSuitableCa = validAdvisors[0];
-        lead.allocatedCa = mostSuitableCa.id;
-        lead.allotmentAtAllocation = mostSuitableCa.currentAllotment + 1;
-        updatedCourseAdvisors[mostSuitableCa.id].totalAllotment++;
-        updatedCourseAdvisors[mostSuitableCa.id].currentAllotment = mostSuitableCa.currentAllotment + 1;
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
     }
 
     const returnObj = {
@@ -580,6 +657,16 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
         courseAdvisors: updatedCourseAdvisors,
     }
     return returnObj;
+}
+
+
+function allocateLead(lead, selectedAdvisor, courseAdvisors) {
+    lead.allocatedCa = selectedAdvisor.id;
+    lead.allotmentAtAllocation = selectedAdvisor.currentAllotment + 1;
+    lead.assessedPropensity = lead.courseAdvisors[selectedAdvisor.id].assessedPropensity;
+    lead.allocatedPropensity = lead.courseAdvisors[selectedAdvisor.id].propensity;
+    courseAdvisors[selectedAdvisor.id].totalAllotment++;
+    courseAdvisors[selectedAdvisor.id].currentAllotment++;
 }
 
 

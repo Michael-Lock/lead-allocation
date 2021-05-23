@@ -1,6 +1,7 @@
 import { Table } from './Table';
 import React from 'react';
 
+const PERCENT_FORMAT_PARAMS = {style: 'percent', maximumFractionDigits: 2};
 
 function ResultsPanel(props) {
 
@@ -28,11 +29,11 @@ function ResultsPanel(props) {
             },
             {
                 Header: 'Average Propensity',
-                accessor: (row) => row ? row.averagePropensity.toFixed(3) : 0,
+                accessor: (row) => row ? row.averagePropensity.toLocaleString(undefined, PERCENT_FORMAT_PARAMS) : 0,
             },
             {
                 Header: 'Variance to Inherent',
-                accessor: (row) => row ? row.varianceToInherent.toFixed(3) : 0,
+                accessor: (row) => row ? row.varianceToInherent.toLocaleString(undefined, PERCENT_FORMAT_PARAMS) : 0,
             },
             {
                 Header: 'Predicted Conversions',
@@ -50,11 +51,11 @@ function ResultsPanel(props) {
             },
             {
                 Header: 'Average Propensity',
-                accessor: (row) => row ? row.averagePropensity.toFixed(3) : 0,
+                accessor: (row) => row ? row.averagePropensity.toLocaleString(undefined, PERCENT_FORMAT_PARAMS) : 0,
             },
             {
                 Header: 'Average Variance to Inherent',
-                accessor: (row) => row ? row.averageVarianceToInherent.toFixed(3) : 0,
+                accessor: (row) => row ? row.averageVarianceToInherent.toLocaleString(undefined, PERCENT_FORMAT_PARAMS) : 0,
             },
             {
                 Header: 'Predicted Conversions',

@@ -29,6 +29,8 @@ function LeadAllocationHome() {
                 portfolio: row.portfolio,
                 location: row.location,
                 decayModifier: row.decayModifier,
+                allotmentLimit: row.allotmentLimit ? row.allotmentLimit : 0,
+                overallPropensity: row.overallPropensity ? row.overallPropensity : 0,
                 totalAllotment: 0,
                 currentAllotment: 0,
                 cumulativePropensity: 0,
@@ -57,19 +59,17 @@ function LeadAllocationHome() {
             };
 
             newLead.courseAdvisors = [];
-            let caNames = [];
-            for (let caNum = 0; caNum < courseAdvisors.length; caNum++) {
-                caNames[caNum] = courseAdvisors[caNum].caName;
-            }
             let caNum = 0;
             for (let fieldNum = 0; fieldNum < e[rowNum].meta.fields.length; fieldNum++) {
-                if (caNames.some(v => v === e[rowNum].meta.fields[fieldNum])) {
+                if (courseAdvisors.some(v => v.caName === e[rowNum].meta.fields[fieldNum])) {
                     let newCa = {
-                        id: caNum++,
+                        id: caNum,
                         caName: e[rowNum].meta.fields[fieldNum],
-                        propensity: row[e[rowNum].meta.fields[fieldNum]],
+                        propensity: courseAdvisors[caNum].overallPropensity ? courseAdvisors[caNum].overallPropensity : row[e[rowNum].meta.fields[fieldNum]],
+                        assessedPropensity: row[e[rowNum].meta.fields[fieldNum]],
                     }
-                    newLead.courseAdvisors.push(newCa);                    
+                    newLead.courseAdvisors.push(newCa);
+                    caNum++;
                 }
             }
             leads[rowNum] = newLead;
@@ -116,7 +116,7 @@ function LeadAllocationHome() {
         for (let leadNum = 0; leadNum < result.leads.length; leadNum++) {
             let lead = result.leads[leadNum];
             let allocatedCa = updatedCourseAdvisors[lead.allocatedCa];
-            let selectedPropensity = lead.courseAdvisors[allocatedCa.id].propensity;
+            let selectedPropensity = lead.courseAdvisors[allocatedCa.id].assessedPropensity;
             allocatedCa.cumulativePropensity = allocatedCa.cumulativePropensity + selectedPropensity;
             allocatedCa.cumulativeInherent = allocatedCa.cumulativeInherent + lead.inherent;
         }
@@ -132,7 +132,7 @@ function LeadAllocationHome() {
         for (let caNum = 0; caNum < updatedCourseAdvisors.length; caNum++) {
             let advisor = updatedCourseAdvisors[caNum];
             advisor.averagePropensity = advisor.totalAllotment ? advisor.cumulativePropensity / advisor.totalAllotment : 0;
-            advisor.varianceToInherent = advisor.cumulativePropensity - advisor.cumulativeInherent;
+            advisor.varianceToInherent = advisor.cumulativeInherent ? (advisor.cumulativePropensity / advisor.cumulativeInherent) - 1 : 0;
             advisor.predictedConversions = advisor.totalAllotment * advisor.averagePropensity;
 
             aggregatedResults.totalLeads += advisor.totalAllotment;
@@ -141,7 +141,7 @@ function LeadAllocationHome() {
             aggregatedResults.predictedConversions += advisor.predictedConversions;
         }
         aggregatedResults.averagePropensity = aggregatedResults.cumulativePropensity / aggregatedResults.totalLeads;
-        aggregatedResults.averageVarianceToInherent = (aggregatedResults.cumulativePropensity - aggregatedResults.cumulativeInherent) / updatedCourseAdvisors.length;
+        aggregatedResults.averageVarianceToInherent = (aggregatedResults.cumulativePropensity / aggregatedResults.cumulativeInherent) - 1;
 
         let updatedResult = {...result};
         updatedResult.courseAdvisors = updatedCourseAdvisors;
