@@ -99,16 +99,16 @@ export const ALLOCATION_MODES = {
         },
         allocationFunction: allocateMostSuitableProportionalAllotmentLimit,
     },
-    SuitabilityAllotmentBalancedLinear: {
+    PropensityAllotmentBalancedLinear: {
         id: 7,
-        name: "Suitability vs. Allotment Balance (Linear)",
-        description: "Allocates leads to the CA based on both their suitability and their current allotment. " +
-        "Higher suitability will increase the preference given to the CA but a higher allotment will decrease it. " + 
+        name: "Propensity vs. Allotment Balance (Linear)",
+        description: "Allocates leads to the CA based on both their propensity and their current allotment. " +
+        "Higher propensity will increase the preference given to the CA but a higher allotment will decrease it. " + 
         "Weightings are used to control the relative importance of choosing most suitable vs. balancing allotment",
         parameters: {
-            suitabilityWeighting: {
+            propensityWeighting: {
                 order: 0,
-                label: "Suitability weighting",
+                label: "Propensity weighting",
             },
             allotmentWeighting: {
                 order: 1,
@@ -127,18 +127,18 @@ export const ALLOCATION_MODES = {
                 label: "Lead decay per sales cycle (%)",
             },
         },
-        allocationFunction: allocateSuitabilityAllotmentBalancedLinear,
+        allocationFunction: allocatePropensityAllotmentBalancedLinear,
     },
-    SuitabilityAllotmentBalancedProportional: {
+    PropensityAllotmentBalancedProportional: {
         id: 8,
-        name: "Suitability vs. Allotment Balance (Proportional)",
-        description: "Allocates leads to the CA based on both their suitability and their current allotment. " +
-        "Higher suitability proportionally relative to the average will increase the preference given to the CA but a higher allotment will decrease it. " + 
+        name: "Propensity vs. Allotment Balance (Proportional)",
+        description: "Allocates leads to the CA based on both their propensity and their current allotment. " +
+        "Higher propensity proportionally relative to the average will increase the preference given to the CA but a higher allotment will decrease it. " + 
         "Weightings are used to control the relative importance of choosing most suitable vs. balancing allotment",
         parameters: {
-            suitabilityWeighting: {
+            propensityWeighting: {
                 order: 0,
-                label: "Suitability weighting",
+                label: "Propensity weighting",
             },
             allotmentWeighting: {
                 order: 1,
@@ -157,7 +157,7 @@ export const ALLOCATION_MODES = {
                 label: "Lead decay per sales cycle (%)",
             },
         },
-        allocationFunction: allocateSuitabilityAllotmentBalancedProportional,
+        allocationFunction: allocatePropensityAllotmentBalancedProportional,
     },
 }
 
@@ -496,15 +496,15 @@ function allocateMostSuitableAdvisorAllotmentLimit(leads, courseAdvisors, parame
 }
 
 
-function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, parameters) {
+function allocatePropensityAllotmentBalancedLinear(leads, courseAdvisors, parameters) {
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.slice();
 
-    const suitabilityWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.suitabilityWeighting.order]);
-    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.allotmentWeighting.order]);
-    const decayPerDay = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.decayPerDay.order]);
-    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.cycleDecayDurationDays.order]);
-    const decayPerCycle = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedLinear.parameters.decayPerCycle.order]) / 100;
+    const propensityWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedLinear.parameters.propensityWeighting.order]);
+    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedLinear.parameters.allotmentWeighting.order]);
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedLinear.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedLinear.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedLinear.parameters.decayPerCycle.order]) / 100;
     const simulationStartDate = leads[0].created.clone().startOf('date');
 
     let lastDailyDecayDate = simulationStartDate.clone();
@@ -523,14 +523,14 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
         for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
             let advisor = validAdvisors[caNum];
             totalAllotment = totalAllotment + advisor.currentAllotment;
-            availableAdvisors++;
             
             let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
-            let suitabilityScore = lead.courseAdvisors[advisor.id].propensity * suitabilityWeighting;
+            let propensityScore = lead.courseAdvisors[advisor.id].propensity * propensityWeighting;
+            availableAdvisors = caIsInWorkingHours ? availableAdvisors + 1 : availableAdvisors;
 
             validAdvisors[caNum] = {
                 ...advisor, 
-                suitabilityScore: suitabilityScore,
+                propensityScore: propensityScore,
                 isInWorkingHours: caIsInWorkingHours,
             }
         }
@@ -553,8 +553,8 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
             }
 
             //Otherwise choosing the CA with the best overall score
-            let overallScoreA = a.suitabilityScore + (averageAllotment - a.currentAllotment) * allotmentWeighting;
-            let overallScoreB = b.suitabilityScore + (averageAllotment - b.currentAllotment) * allotmentWeighting;
+            let overallScoreA = a.propensityScore + (averageAllotment - a.currentAllotment) * allotmentWeighting;
+            let overallScoreB = b.propensityScore + (averageAllotment - b.currentAllotment) * allotmentWeighting;
             if (overallScoreB !== overallScoreA) {
                 return overallScoreB - overallScoreA;
             }
@@ -575,15 +575,15 @@ function allocateSuitabilityAllotmentBalancedLinear(leads, courseAdvisors, param
 }
 
 
-function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors, parameters) {
+function allocatePropensityAllotmentBalancedProportional(leads, courseAdvisors, parameters) {
     let updatedLeads = leads.slice();
     let updatedCourseAdvisors = courseAdvisors.slice();
 
-    const suitabilityWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.suitabilityWeighting.order]);
-    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.allotmentWeighting.order]);
-    const decayPerDay = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.decayPerDay.order]);
-    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.cycleDecayDurationDays.order]);
-    const decayPerCycle = Number(parameters[ALLOCATION_MODES.SuitabilityAllotmentBalancedProportional.parameters.decayPerCycle.order]) / 100;
+    const propensityWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.propensityWeighting.order]);
+    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.allotmentWeighting.order]);
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.decayPerCycle.order]) / 100;
     const simulationStartDate = leads[0].created.clone().startOf('date');
 
     let lastDailyDecayDate = simulationStartDate.clone();
@@ -604,14 +604,12 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
             let advisor = validAdvisors[caNum];
             totalAllotment = totalAllotment + advisor.currentAllotment;
             cumulativePropensity = cumulativePropensity + lead.courseAdvisors[advisor.id].propensity;
-            availableAdvisors++;
             
             let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
-            // let suitabilityScore = lead.courseAdvisors[advisor.id].propensity * suitabilityWeighting;
+            availableAdvisors = caIsInWorkingHours ? availableAdvisors + 1 : availableAdvisors;
 
             validAdvisors[caNum] = {
                 ...advisor, 
-                // suitabilityScore: suitabilityScore,
                 propensity: lead.courseAdvisors[advisor.id].propensity,
                 isInWorkingHours: caIsInWorkingHours,
             }
@@ -638,8 +636,8 @@ function allocateSuitabilityAllotmentBalancedProportional(leads, courseAdvisors,
             }
 
             //Otherwise choosing the CA with the best overall score
-            let overallScoreA = calculateOverallScore(a, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting);
-            let overallScoreB = calculateOverallScore(b, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting);
+            let overallScoreA = calculateOverallScore(a, averagePropensity, averageAllotment, propensityWeighting, allotmentWeighting);
+            let overallScoreB = calculateOverallScore(b, averagePropensity, averageAllotment, propensityWeighting, allotmentWeighting);
             if (overallScoreB !== overallScoreA) {
                 return overallScoreB - overallScoreA;
             }
@@ -696,10 +694,10 @@ function applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, last
     return lastDailyDecayDate;
 }
 
-function calculateOverallScore(advisor, averagePropensity, averageAllotment, suitabilityWeighting, allotmentWeighting) {
-    let suitabilityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * suitabilityWeighting : 0;
+function calculateOverallScore(advisor, averagePropensity, averageAllotment, propensityWeighting, allotmentWeighting) {
+    let propensityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * propensityWeighting : 0;
     let allotmentScore = (averageAllotment - advisor.currentAllotment) * allotmentWeighting
-    return suitabilityScore + allotmentScore;
+    return propensityScore + allotmentScore;
 }
 
 function isMatchingPortfolio(advisor, lead) {
