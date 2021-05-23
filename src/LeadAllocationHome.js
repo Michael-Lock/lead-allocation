@@ -13,7 +13,8 @@ function LeadAllocationHome() {
     const [selectedMode, setSelectedMode] = useState();
     const [aggregatedResults, setAggregatedResults] = useState();
     const [inputParameters, setInputParameters] = useState();
-    const [exportData, setExportData] = useState();
+    const [leadExportData, setLeadExportData] = useState();
+    const [resultSummaryExportData, setResultSummaryExportData] = useState();
 
     const DATE_FORMAT = "YYYY-MM-DDTHH:MMZ";
 
@@ -82,7 +83,7 @@ function LeadAllocationHome() {
         setCourseAdvisors();
         setAggregatedResults();
         setInputParameters();
-        setExportData();
+        setLeadExportData();
     }
 
     let handleModeChange = (selectedMode) => {
@@ -108,7 +109,8 @@ function LeadAllocationHome() {
         setLeadData(result.leads);
         setCourseAdvisors(result.courseAdvisors);
         setAggregatedResults(result.aggregatedResults);
-        setExportData(result.exportData);
+        setLeadExportData(result.leadExportData);
+        setResultSummaryExportData(result.resultSummaryExportData);
     }
 
     let generateResults = (result) =>  {
@@ -164,16 +166,41 @@ function LeadAllocationHome() {
         });
 
         let updatedResult = {...result};
-        updatedResult.exportData = adjustedLeads;
+        updatedResult.leadExportData = adjustedLeads;
+
+        let resultSummary = courseAdvisors.slice().map((advisor) => {
+            return {
+                name: advisor.caName,
+                id: advisor.id,
+                portfolio: advisor.portfolio,
+                location: advisor.location,
+                totalAllotment: advisor.totalAllotment,
+                finalAllotment: advisor.currentAllotment,
+                averagePropensity: advisor.averagePropensity,
+                varianceToInherent: advisor.varianceToInherent,
+                predictedConversions: advisor.predictedConversions,
+                unmodelledPropensityUsed: advisor.overallPropensity ? advisor.overallPropensity : "-",
+            }
+        });
+
+        resultSummary.push({
+            name: "Total",
+            totalAllotment: result.aggregatedResults.totalLeads,
+            averagePropensity: result.aggregatedResults.averagePropensity,
+            varianceToInherent: result.aggregatedResults.averageVarianceToInherent,
+            predictedConversions: result.aggregatedResults.predictedConversions,
+        });
+
+        updatedResult.resultSummaryExportData = resultSummary;
 
         return updatedResult;
     }
 
 
-    let getExportFilename = () => {
+    let getExportFilename = (type) => {
         let filename = "invalid-nodata"
         if (aggregatedResults && selectedMode) {
-            filename = Object.keys(ALLOCATION_MODES)[selectedMode.id] + "-" + moment().format("YYYYMMDD-HHMM-ss")
+            filename = Object.keys(ALLOCATION_MODES)[selectedMode.id] + "-" + type + "-" + moment().format("YYYYMMDD-HHMMss")
         }
         return filename;
     }
@@ -209,12 +236,20 @@ function LeadAllocationHome() {
                     Run Simulation
                 </button>
                 <CSVDownloader
-                    data={exportData}
+                    data={leadExportData}
                     type={"button"}
-                    filename={getExportFilename()}
+                    filename={getExportFilename("LeadAllocation")}
                     bom={false}
                 >
-                    Export Results
+                    Export Lead Allocations
+                </CSVDownloader>
+                <CSVDownloader
+                    data={resultSummaryExportData}
+                    type={"button"}
+                    filename={getExportFilename("ResultSummary")}
+                    bom={false}
+                >
+                    Export Result Summary
                 </CSVDownloader>
                 <ResultsPanel
                     courseAdvisors={courseAdvisors}
