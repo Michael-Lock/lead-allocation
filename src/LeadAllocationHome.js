@@ -35,6 +35,7 @@ function LeadAllocationHome() {
                 totalAllotment: 0,
                 currentAllotment: 0,
                 cumulativePropensity: 0,
+                runningInherent: 0, //hacky, used to count the cumulative inherent through the sim as opposed to cumulativeInherent as the result summary value 
                 cumulativeInherent: 0,
                 averagePropensity: 0,
                 varianceToInherent: 0,

@@ -159,6 +159,71 @@ export const ALLOCATION_MODES = {
         },
         allocationFunction: allocatePropensityAllotmentBalancedProportional,
     },
+    PropensityAllotmentBalancedProportionalPerCluster: {
+        id: 9,
+        name: "Propensity vs. Allotment Balance (Proportional per Cluster)",
+        description: "Allocates leads to the CA based on both their propensity and their current allotment. " +
+        "Higher propensity proportionally relative to the average will increase the preference given to the CA but a higher allotment of leads from the same cluster will decrease it. " + 
+        "Weightings are used to control the relative importance of choosing most suitable vs. balancing allotment",
+        parameters: {
+            propensityWeighting: {
+                order: 0,
+                label: "Propensity weighting",
+            },
+            allotmentWeighting: {
+                order: 1,
+                label: "Allotment weighting",
+            },
+            // decayPerDay: {
+            //     order: 2,
+            //     label: "Lead decay per day",
+            // },
+            // cycleDecayDurationDays: {
+            //     order: 3,
+            //     label: "Days per sales cycle",
+            // },
+            // decayPerCycle: {
+            //     order: 4,
+            //     label: "Lead decay per sales cycle (%)",
+            // },
+        },
+        allocationFunction: allocatePropensityAllotmentBalancedProportionalPerCluster,
+    },
+    PropensityAllotmentDifficultyBalancedProportional: {
+        id: 10,
+        name: "Propensity vs. Allotment vs. Difficulty Balance (Proportional)",
+        description: "Allocates leads to the CA based on their propensity, their current allotment, and the proportion of 'difficult' leads they are getting. " +
+        "Higher propensity proportionally relative to the average will increase the preference given to the CA but a higher allotment will decrease it. " +
+        "If the CA has been receiving a higher number of leads that inherently convert at a low likelihood, they will be increasingly preferred to get higher likelihood leads" + 
+        "Weightings are used to control the relative importance of choosing most suitable vs. balancing allotment",
+        parameters: {
+            propensityWeighting: {
+                order: 0,
+                label: "Propensity weighting",
+            },
+            allotmentWeighting: {
+                order: 1,
+                label: "Allotment weighting",
+            },
+            difficultyWeighting: {
+                order: 2,
+                label: "Difficulty weighting",
+            },
+            decayPerDay: {
+                order: 3,
+                label: "Lead decay per day",
+            },
+            cycleDecayDurationDays: {
+                order: 4,
+                label: "Days per sales cycle",
+            },
+            decayPerCycle: {
+                order: 5,
+                label: "Lead decay per sales cycle (%)",
+            },
+        },
+        allocationFunction: allocatePropensityAllotmentDifficultyBalancedProportional,
+    },
 }
 
 const PORTFOLIOS = {
@@ -658,6 +723,191 @@ function allocatePropensityAllotmentBalancedProportional(leads, courseAdvisors, 
 }
 
 
+function allocatePropensityAllotmentBalancedProportionalPerCluster(leads, courseAdvisors, parameters) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+
+    const propensityWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.propensityWeighting.order]);
+    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.allotmentWeighting.order]);
+    // const decayPerDay = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.decayPerDay.order]);
+    // const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.cycleDecayDurationDays.order]);
+    // const decayPerCycle = Number(parameters[ALLOCATION_MODES.PropensityAllotmentBalancedProportional.parameters.decayPerCycle.order]) / 100;
+    // const simulationStartDate = leads[0].created.clone().startOf('date');
+
+    // let lastDailyDecayDate = simulationStartDate.clone();
+    // let lastCycleDecayDate = simulationStartDate.clone();
+    let caLeadsInCluster = courseAdvisors.slice().map((advisor) => {
+        return {
+            ...advisor,
+            leadsInCluster: [],
+        };
+    });
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];
+        let totalAllotment = 0;
+        let cumulativePropensity = 0;
+        let availableAdvisors = 0;
+        // let currentDate = leads[i].created.clone().startOf('date');
+
+        // lastDailyDecayDate = applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay);
+        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            cumulativePropensity = cumulativePropensity + lead.courseAdvisors[advisor.id].propensity;
+            
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            availableAdvisors = caIsInWorkingHours ? availableAdvisors + 1 : availableAdvisors;
+
+            let caLeadsInCurrentCluster = caLeadsInCluster[advisor.id].leadsInCluster[lead.cluster] ? caLeadsInCluster[advisor.id].leadsInCluster[lead.cluster] : 0;
+            totalAllotment = totalAllotment + caLeadsInCurrentCluster;
+
+            validAdvisors[caNum] = {
+                ...advisor, 
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+                isInWorkingHours: caIsInWorkingHours,
+                leadsInCluster: caLeadsInCurrentCluster,
+            }
+        }
+        
+        let averageAllotment;
+        let averagePropensity;
+        if (availableAdvisors > 0) {
+            averageAllotment = totalAllotment / availableAdvisors;
+            averagePropensity = cumulativePropensity / availableAdvisors;
+        }
+        else {
+            averageAllotment = totalAllotment / validAdvisors.length;
+            averagePropensity = cumulativePropensity / validAdvisors.length;
+        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+
+            //Otherwise choosing the CA with the best overall score
+            let overallScoreA = calculateOverallScoreClustered(a, averagePropensity, averageAllotment, propensityWeighting, allotmentWeighting);
+            let overallScoreB = calculateOverallScoreClustered(b, averagePropensity, averageAllotment, propensityWeighting, allotmentWeighting);
+            if (overallScoreB !== overallScoreA) {
+                return overallScoreB - overallScoreA;
+            }
+
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
+        caLeadsInCluster[selectedAdvisor.id].leadsInCluster[lead.cluster] = caLeadsInCluster[selectedAdvisor.id].leadsInCluster[lead.cluster] ? caLeadsInCluster[selectedAdvisor.id].leadsInCluster[lead.cluster] + 1 : 1;
+    }
+
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
+function allocatePropensityAllotmentDifficultyBalancedProportional(leads, courseAdvisors, parameters) {
+    let updatedLeads = leads.slice();
+    let updatedCourseAdvisors = courseAdvisors.slice();
+
+    const propensityWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentDifficultyBalancedProportional.parameters.propensityWeighting.order]);
+    const allotmentWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentDifficultyBalancedProportional.parameters.allotmentWeighting.order]);
+    const difficultyWeighting = Number(parameters[ALLOCATION_MODES.PropensityAllotmentDifficultyBalancedProportional.parameters.difficultyWeighting.order]);
+    const decayPerDay = Number(parameters[ALLOCATION_MODES.PropensityAllotmentDifficultyBalancedProportional.parameters.decayPerDay.order]);
+    const cycleDecayDurationDays = Number(parameters[ALLOCATION_MODES.PropensityAllotmentDifficultyBalancedProportional.parameters.cycleDecayDurationDays.order]);
+    const decayPerCycle = Number(parameters[ALLOCATION_MODES.PropensityAllotmentDifficultyBalancedProportional.parameters.decayPerCycle.order]) / 100;
+    const simulationStartDate = leads[0].created.clone().startOf('date');
+
+    let lastDailyDecayDate = simulationStartDate.clone();
+    let lastCycleDecayDate = simulationStartDate.clone();
+    
+    let totalCumulativeInherentAtLead = 0;
+
+    for (let i = 0; i < leads.length; i++) {
+        let lead = updatedLeads[i];
+        let totalAllotment = 0;
+        let cumulativePropensity = 0;
+        let availableAdvisors = 0;
+        let currentDate = leads[i].created.clone().startOf('date');
+
+        totalCumulativeInherentAtLead = totalCumulativeInherentAtLead + lead.inherent;
+
+        lastDailyDecayDate = applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, lastDailyDecayDate, cycleDecayDurationDays, decayPerCycle, decayPerDay);
+        
+        let validAdvisors = updatedCourseAdvisors.filter((advisor) => (isMatchingPortfolio(advisor, lead)));
+
+        for (let caNum = 0; caNum < validAdvisors.length; caNum++) {
+            let advisor = validAdvisors[caNum];
+            totalAllotment = totalAllotment + advisor.currentAllotment;
+            cumulativePropensity = cumulativePropensity + lead.courseAdvisors[advisor.id].propensity;
+            
+            let caIsInWorkingHours = isInWorkingHours(lead.created, updatedCourseAdvisors[advisor.id].location);
+            availableAdvisors = caIsInWorkingHours ? availableAdvisors + 1 : availableAdvisors;
+
+            validAdvisors[caNum] = {
+                ...advisor, 
+                propensity: lead.courseAdvisors[advisor.id].propensity,
+                isInWorkingHours: caIsInWorkingHours,
+            }
+        }
+        
+        let averageAllotment;
+        let averagePropensity;
+        let averageInherent;
+        if (availableAdvisors > 0) {
+            averageAllotment = totalAllotment / availableAdvisors;
+            averagePropensity = cumulativePropensity / availableAdvisors;
+            averageInherent = totalCumulativeInherentAtLead / availableAdvisors;
+        }
+        else {
+            averageAllotment = totalAllotment / validAdvisors.length;
+            averagePropensity = cumulativePropensity / validAdvisors.length;
+            averageInherent = totalCumulativeInherentAtLead / validAdvisors.length;
+        }
+
+        validAdvisors.sort((a,b) => {
+            //give firm precedence to those who are currently working
+            if (b.isInWorkingHours && !a.isInWorkingHours) {
+                return 1;
+            }
+            if (a.isInWorkingHours && !b.isInWorkingHours) {
+                return -1;
+            }
+
+            //Otherwise choosing the CA with the best overall score
+            let overallScoreA = calculateOverallScoreWithDifficulty(a, averagePropensity, averageAllotment, averageInherent, propensityWeighting, allotmentWeighting, difficultyWeighting);
+            let overallScoreB = calculateOverallScoreWithDifficulty(b, averagePropensity, averageAllotment, averageInherent, propensityWeighting, allotmentWeighting, difficultyWeighting);
+            if (overallScoreB !== overallScoreA) {
+                return overallScoreB - overallScoreA;
+            }
+
+            //use allotment numbers as a tiebreaker
+            return a.currentAllotment - b.currentAllotment;
+        });
+
+        let selectedAdvisor = validAdvisors[0];
+        allocateLead(lead, selectedAdvisor, updatedCourseAdvisors);
+        updatedCourseAdvisors[selectedAdvisor.id].runningInherent += lead.inherent;
+    }
+
+    const returnObj = {
+        leads: updatedLeads,
+        courseAdvisors: updatedCourseAdvisors,
+    }
+    return returnObj;
+}
+
+
 function allocateLead(lead, selectedAdvisor, courseAdvisors) {
     lead.allocatedCa = selectedAdvisor.id;
     lead.allotmentAtAllocation = selectedAdvisor.currentAllotment + 1;
@@ -698,6 +948,19 @@ function calculateOverallScore(advisor, averagePropensity, averageAllotment, pro
     let propensityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * propensityWeighting : 0;
     let allotmentScore = (averageAllotment - advisor.currentAllotment) * allotmentWeighting
     return propensityScore + allotmentScore;
+}
+
+function calculateOverallScoreClustered(advisor, averagePropensity, averageAllotment, propensityWeighting, allotmentWeighting) {
+    let propensityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * propensityWeighting : 0;
+    let allotmentScore = (averageAllotment - advisor.leadsInCluster) * allotmentWeighting
+    return propensityScore + allotmentScore;
+}
+
+function calculateOverallScoreWithDifficulty(advisor, averagePropensity, averageAllotment, averageInherent, propensityWeighting, allotmentWeighting, difficultyWeighting) {
+    let propensityScore = averagePropensity > 0 ? (advisor.propensity - averagePropensity) / averagePropensity * propensityWeighting : 0;
+    let allotmentScore = (averageAllotment - advisor.currentAllotment) * allotmentWeighting
+    let difficultyScore = averageInherent > 0 ? (advisor.runningInherent - averageInherent / averageInherent) * difficultyWeighting : 0;
+    return propensityScore + allotmentScore - difficultyScore;
 }
 
 function isMatchingPortfolio(advisor, lead) {
