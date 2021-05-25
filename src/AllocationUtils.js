@@ -678,7 +678,7 @@ function applyDecay(updatedCourseAdvisors, currentDate, lastCycleDecayDate, last
             let advisor = updatedCourseAdvisors[caNum];
             advisor.currentAllotment = advisor.currentAllotment * (1 - totalDecayPercentage);
         }
-        lastCycleDecayDate.add(cycleDecayDurationDays * cycleDelayDays, 'days');
+        lastCycleDecayDate.add(cycleDecayDurationDays * decayCyclesPassed, 'days');
     }
 
     //Per day delay
